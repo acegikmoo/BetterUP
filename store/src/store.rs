@@ -1,3 +1,4 @@
+use crate::config::Config;
 use diesel::prelude::*;
 
 pub struct Store {
@@ -5,7 +6,7 @@ pub struct Store {
 }
 
 impl Store {
-    fn default() -> Result<Self, ConnectionError> {
+    pub fn default() -> Result<Self, ConnectionError> {
         let config = Config::default();
         let conn = PgConnection::establish(&config.db_url)?;
         Ok(Self { conn })

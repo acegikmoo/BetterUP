@@ -6,28 +6,21 @@ use poem::{
 };
 
 use crate::{request_inputs::CreateWebsiteInput, request_outputs::CreateWebsiteOutput};
-
-use store::Store;
-
+use store::store::Store;
 pub mod request_inputs;
 pub mod request_outputs;
 
 #[handler]
 fn get_website(Path(name): Path<String>) -> String {
-    let s = Store {};
-    s.create_user();
     format!("hello: {name}")
 }
 
 #[handler]
 fn create_website(Json(data): Json<CreateWebsiteInput>) -> Json<CreateWebsiteOutput> {
-    let s = Store {};
-    s.create_user();
-    let _url = data.url;
+    let s = Store::default();
+    let id = s.create_website();
 
-    let response = CreateWebsiteOutput {
-        id: "ID".to_string(),
-    };
+    let response = CreateWebsiteOutput { id };
 
     Json(response)
 }
