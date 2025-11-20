@@ -1,0 +1,11 @@
+target/
+debug/
+release/
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+.env
+.env.*
