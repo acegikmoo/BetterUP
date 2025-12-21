@@ -35,7 +35,7 @@ impl Store {
         &mut self,
         input_username: String,
         input_password: String,
-    ) -> Result<bool, diesel::result::Error> {
+    ) -> Result<String, diesel::result::Error> {
         use crate::schema::user::dsl::*;
 
         let user_result = user
@@ -44,8 +44,8 @@ impl Store {
             .first(&mut self.conn)?;
 
         if user_result.password != input_password {
-            return Ok(false);
+            return Ok(user_result.id);
         }
-        Ok(true)
+        Err(diesel::result::Error::NotFound)
     }
 }

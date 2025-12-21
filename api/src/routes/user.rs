@@ -3,9 +3,19 @@ use crate::{
     request_outputs::{CreateUserOutput, SigninOutput},
 };
 use poem::{
-    handler,
+    Error, handler,
+    http::StatusCode,
     web::{Data, Json},
 };
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Claims {
+    sub: String,
+    exp: usize,
+}
+
 use std::sync::{Arc, Mutex};
 use store::store::Store;
 
@@ -13,24 +23,39 @@ use store::store::Store;
 pub fn sign_up(
     Json(data): Json<CreateUserInput>,
     Data(s): Data<&Arc<Mutex<Store>>>,
-) -> Json<CreateUserOutput> {
+) -> Result<Json<CreateUserOutput>, Error> {
     let mut locked_s = s.lock().unwrap();
-    let id = locked_s.sign_up(data.username, data.password).unwrap();
+    let id = locked_s
+        .sign_up(data.username, data.password)
+        .map_err(|_| Error::from_status(StatusCode::CONFLICT))?;
 
     let response = CreateUserOutput { id };
 
-    Json(response)
+    Ok(Json(response))
 }
 
 #[handler]
 pub fn sign_in(
     Json(data): Json<CreateUserInput>,
     Data(s): Data<&Arc<Mutex<Store>>>,
-) -> Json<SigninOutput> {
+) -> Result<Json<SigninOutput>, Error> {
     let mut locked_s = s.lock().unwrap();
-    let _exists = locked_s.sign_in(data.username, data.password).unwrap();
-    let response = SigninOutput {
-        jwt: String::from("Rubai"),
-    };
-    Json(response)
+    let user_id = locked_s.sign_in(data.username, data.password);
+
+    match user_id {
+        Ok(user_id) => {
+            let response = SigninOutput { jwt: user_id };
+            let my_claims = Claims {
+                sub: user_id,
+                exp: 1111111,
+            };
+            let token = encode(
+                &Header::default(),
+                &my_claims,
+                &EncodingKey::from_secret("secret".as_ref()),
+            )?;
+            Ok(Json(response))
+        }
+        Err(_) => Err(Error::from_status(StatusCode::UNAUTHORIZED)),
+    }
 }
