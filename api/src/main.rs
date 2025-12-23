@@ -1,28 +1,45 @@
-use std::sync::{Arc, Mutex};
-
-use poem::{EndpointExt, Route, Server, get, listener::TcpListener, post};
-
-use crate::routes::{
-    user::{sign_in, sign_up},
-    website::{create_website, get_website},
+use input::CreateWebsite;
+use poem::{
+    EndpointExt, Route, Server, get, handler,
+    listener::TcpListener,
+    post,
+    web::{Data, Json, Path},
 };
-use store::store::Store;
-pub mod request_inputs;
-pub mod request_outputs;
-pub mod routes;
+use store::{models::website::Website, store::Store};
+pub mod input;
 
-#[tokio::main(flavor = "multi_thread")]
+#[handler]
+fn get_website(Path(website_id): Path<String>, store: Data<&Store>) -> Json<Website> {
+    let website = store.0.get_website(website_id).unwrap();
+    Json(website)
+}
+
+#[handler]
+fn create_website(website_input: Json<CreateWebsite>, store: Data<&Store>) -> Json<Website> {
+    let website = store.0.create_website(website_input.url.clone()).unwrap();
+    Json(website)
+}
+
+#[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-    let s = Arc::new(Mutex::new(Store::new().unwrap()));
-    let app = Route::new()
-        .at("/website/:website_id", get(get_website))
-        .at("/website", post(create_website))
-        .at("/user/signup", post(sign_up))
-        .at("/user/signin", post(sign_in))
-        .data(s);
+    dotenv::from_filename(".env").map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to load .env file: {}", e),
+        )
+    })?;
 
-    Server::new(TcpListener::bind("0.0.0.0:3000"))
-        .name("betteruptime-api")
+    let store = Store::new().await.map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to initialize store: {}", e),
+        )
+    })?;
+    let app = Route::new()
+        .at("/status/:website_id", get(get_website))
+        .at("/website", post(create_website))
+        .data(store);
+    Server::new(TcpListener::bind("0.0.0.0:3002"))
         .run(app)
         .await
 }

@@ -1,14 +1,20 @@
-use crate::config::Config;
-use diesel::prelude::*;
+use std::sync::{Arc, Mutex};
 
+use diesel::{Connection, ConnectionError, PgConnection};
+
+use crate::config::Config;
+
+#[derive(Clone)]
 pub struct Store {
-    pub conn: PgConnection,
+    pub conn: Arc<Mutex<PgConnection>>,
 }
 
 impl Store {
-    pub fn new() -> Result<Self, ConnectionError> {
+    pub async fn new() -> Result<Self, ConnectionError> {
         let config = Config::default();
         let conn = PgConnection::establish(&config.db_url)?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
     }
 }

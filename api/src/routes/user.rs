@@ -2,17 +2,17 @@ use crate::{
     request_inputs::CreateUserInput,
     request_outputs::{CreateUserOutput, SigninOutput},
 };
+use jsonwebtoken::{EncodingKey, Header, encode};
 use poem::{
     Error, handler,
     http::StatusCode,
     web::{Data, Json},
 };
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Claims {
-    sub: String,
+pub struct Claims {
+    pub sub: String,
     exp: usize,
 }
 
@@ -28,9 +28,7 @@ pub fn sign_up(
     let id = locked_s
         .sign_up(data.username, data.password)
         .map_err(|_| Error::from_status(StatusCode::CONFLICT))?;
-
     let response = CreateUserOutput { id };
-
     Ok(Json(response))
 }
 
@@ -44,7 +42,6 @@ pub fn sign_in(
 
     match user_id {
         Ok(user_id) => {
-            let response = SigninOutput { jwt: user_id };
             let my_claims = Claims {
                 sub: user_id,
                 exp: 1111111,
@@ -53,7 +50,10 @@ pub fn sign_in(
                 &Header::default(),
                 &my_claims,
                 &EncodingKey::from_secret("secret".as_ref()),
-            )?;
+            )
+            .map_err(|_| Error::from_status(StatusCode::INTERNAL_SERVER_ERROR))?;
+
+            let response = SigninOutput { jwt: token };
             Ok(Json(response))
         }
         Err(_) => Err(Error::from_status(StatusCode::UNAUTHORIZED)),

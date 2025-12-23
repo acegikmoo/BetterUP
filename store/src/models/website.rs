@@ -1,48 +1,47 @@
 use crate::store::Store;
 use chrono::NaiveDateTime;
-use chrono::Utc;
-use diesel::prelude::*;
+use diesel::{
+    RunQueryDsl, Selectable, SelectableHelper,
+    prelude::{Insertable, Queryable},
+};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Queryable, Insertable, Selectable)]
+#[derive(Queryable, Selectable, Insertable)]
 #[diesel(table_name = crate::schema::website)]
+#[derive(Serialize, Deserialize)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct Website {
     pub id: String,
     pub url: String,
-    pub user_id: String,
     pub time_added: NaiveDateTime,
 }
 
 impl Store {
-    pub fn create_website(
-        &mut self,
-        user_id: String,
-        url: String,
-    ) -> Result<Website, diesel::result::Error> {
-        let id = Uuid::new_v4();
-        let website = Website {
-            user_id,
+    pub fn create_website(&self, url: String) -> Result<Website, diesel::result::Error> {
+        let new_website = Website {
+            id: Uuid::new_v4().to_string(),
             url,
-            id: id.to_string(),
-            time_added: Utc::now().naive_utc(),
+            time_added: chrono::Utc::now().naive_utc(),
         };
+        let mut conn_mut = self.conn.lock().unwrap();
 
-        let website = diesel::insert_into(crate::schema::website::table)
-            .values(&website)
+        let inserted_website = diesel::insert_into(crate::schema::website::table)
+            .values(&new_website)
             .returning(Website::as_returning())
-            .get_result(&mut self.conn)?;
+            .get_result(&mut *conn_mut)?;
 
-        Ok(website)
+        Ok(inserted_website)
     }
-    pub fn get_website(&mut self, input_id: String) -> Result<Website, diesel::result::Error> {
-        use crate::schema::website::dsl::*;
 
-        let website_result = website
-            .filter(id.eq(input_id))
+    pub fn get_website(&self, website_id: String) -> Result<Website, diesel::result::Error> {
+        let mut conn_mut = self.conn.lock().unwrap();
+
+        use diesel::prelude::*;
+
+        crate::schema::website::table
             .select(Website::as_select())
-            .first(&mut self.conn)?;
-
-        Ok(website_result)
+            .filter(crate::schema::website::id.eq(website_id))
+            .first(&mut *conn_mut)
     }
 }
