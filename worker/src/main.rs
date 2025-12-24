@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let influx_url = std::env::var("INFLUXDB_URL").expect("INFLUXDB_URL must be set");
     let influx_token = std::env::var("INFLUXDB_TOKEN").expect("INFLUXDB_TOKEN must be set");
-    let influx = InfluxClient::new(&influx_url, "website_ticks", &influx_token);
+    let influx = InfluxClient::new(&influx_url, "0xdolores", &influx_token);
 
     let http_client = HttpClient::new();
     let worker_id = uuid::Uuid::new_v4().to_string();
@@ -80,7 +80,7 @@ async fn process_websites(
             .timestamp(start * 1_000_000)
             .build()?;
         influx
-            .write("website_ticks", stream::iter(vec![point]))
+            .write("uptime_metrics", stream::iter(vec![point]))
             .await?;
 
         println!("status: {:?}", status);
