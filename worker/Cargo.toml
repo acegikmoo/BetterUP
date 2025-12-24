@@ -1,0 +1,16 @@
+[package]
+name = "worker"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+redis_lib = { version = "0.1.0", path = "../redis_lib"}
+chrono = "0.4.42"
+dotenv = "0.15.0"
+futures = "0.3.31"
+influxdb2 = "0.5.2"
+reqwest = { version = "0.12.28", features = ["json"] }
+serde = {version = "1.0.228", features = ["derive"]}
+serde_json = "1.0.147"
+tokio = "1.48.0"
+uuid = {version = "1.19.0", features = ["v4"]}
