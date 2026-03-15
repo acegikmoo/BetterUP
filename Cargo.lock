@@ -45,6 +45,7 @@ dependencies = [
  "dotenv",
  "jsonwebtoken",
  "poem",
+ "redis_lib",
  "serde",
  "store",
  "tokio",

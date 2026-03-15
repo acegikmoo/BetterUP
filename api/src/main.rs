@@ -4,6 +4,7 @@ use poem::{
     post,
     web::{Data, Json, Path},
 };
+use redis_lib::{RedisStore, WebsiteStreamEntry};
 
 use store::{
     Store,
@@ -27,12 +28,24 @@ async fn get_website(store: Data<&Store>, id: Path<String>) -> Json<Option<Websi
 #[handler]
 async fn create_website(
     store: Data<&Store>,
+    redis: Data<&RedisStore>,
     input: Json<input::CreateWebsite>,
 ) -> Result<Json<Website>, poem::Error> {
     let website = store
         .create_website(&input.url, input.name.as_deref())
         .await
         .map_err(poem::error::InternalServerError)?;
+
+    let entry = WebsiteStreamEntry {
+        id: website.id.clone(),
+        url: website.url.clone(),
+        name: website.name.clone(),
+    };
+
+    redis.add_website_to_stream(entry).await.map_err(|e| {
+        poem::Error::from_string(e.to_string(), poem::http::StatusCode::INTERNAL_SERVER_ERROR)
+    })?;
+
     Ok(Json(website))
 }
 
@@ -78,6 +91,11 @@ async fn main() -> Result<(), std::io::Error> {
         .await
         .map_err(|e| std::io::Error::other(format!("Failed to initialize store: {}", e)))?;
 
+    let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
+    let redis = RedisStore::new(&redis_url)
+        .await
+        .map_err(|e| std::io::Error::other(format!("Failed to initialize redis: {}", e)))?;
+
     let app = Route::new()
         .at("/websites", get(get_websites).post(create_website))
         .at(
@@ -87,9 +105,10 @@ async fn main() -> Result<(), std::io::Error> {
                 .delete(delete_website),
         )
         .at("/regions", post(create_region).get(get_regions))
-        .data(store);
+        .data(store)
+        .data(redis);
 
-    Server::new(TcpListener::bind("0.0.0.0:3000"))
+    Server::new(TcpListener::bind("0.0.0.0:3001"))
         .run(app)
         .await
 }
