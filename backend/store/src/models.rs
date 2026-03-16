@@ -14,3 +14,10 @@ pub struct Region {
     pub id: String,
     pub name: String,
 }
+
+pub struct User {
+    pub id: String,
+    pub email: String,
+    pub password: String,
+    pub created_at: NaiveDateTime,
+}

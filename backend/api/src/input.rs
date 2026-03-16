@@ -16,3 +16,9 @@ pub struct UpdateWebsite {
 pub struct CreateRegion {
     pub name: String,
 }
+
+#[derive(Serialize, Deserialize)]
+pub struct AuthInput {
+    pub email: String,
+    pub password: String,
+}

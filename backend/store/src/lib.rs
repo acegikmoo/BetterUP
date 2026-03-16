@@ -20,6 +20,38 @@ impl Store {
         Ok(Store { pool })
     }
 
+    pub async fn create_user(
+        &self,
+        email: &str,
+        password: &str,
+    ) -> Result<models::User, sqlx::Error> {
+        let user = sqlx::query_as!(
+            models::User,
+            r#"
+        INSERT INTO "user" (id, email, password)
+        VALUES ($1, $2, $3)
+        RETURNING id, email, password, created_at
+        "#,
+            Uuid::new_v4().to_string(),
+            email,
+            password
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(user)
+    }
+
+    pub async fn get_user_by_email(&self, email: &str) -> Result<models::User, sqlx::Error> {
+        let user = sqlx::query_as!(
+            models::User,
+            r#"SELECT id, email, password, created_at FROM "user" WHERE email = $1"#,
+            email
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(user)
+    }
+
     pub async fn create_website(
         &self,
         url: &str,

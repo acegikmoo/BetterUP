@@ -5,15 +5,102 @@ use poem::{
     post,
     web::{Data, Json, Path},
 };
-use redis_lib::{RedisStore, WebsiteStreamEntry};
+use serde::{Deserialize, Serialize};
 
-use std::fmt::format;
+use bcrypt::{DEFAULT_COST, hash, verify};
+use jsonwebtoken::{EncodingKey, Header, encode};
+use redis_lib::{RedisStore, WebsiteStreamEntry};
 use store::{
     Store,
     models::{Region, Website},
 };
 
 mod input;
+
+#[derive(Serialize, Deserialize)]
+struct Claims {
+    sub: String,
+    email: String,
+    exp: usize,
+}
+
+#[derive(Serialize)]
+struct AuthResponse {
+    token: String,
+}
+
+#[handler]
+async fn signup(
+    store: Data<&Store>,
+    jwt_secret: Data<&String>,
+    input: Json<input::AuthInput>,
+) -> Result<Json<AuthResponse>, poem::Error> {
+    let hashed = hash(&input.password, DEFAULT_COST).map_err(poem::error::InternalServerError)?;
+
+    let user = store
+        .create_user(&input.email, &hashed)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::Database(db) if db.constraint() == Some("user_email_key") => {
+                poem::Error::from_string("Email already in use", poem::http::StatusCode::CONFLICT)
+            }
+            _ => poem::error::InternalServerError(e),
+        })?;
+
+    let claims = Claims {
+        sub: user.id,
+        email: user.email,
+        exp: 2000000000,
+    };
+
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(jwt_secret.as_bytes()),
+    )
+    .map_err(poem::error::InternalServerError)?;
+
+    Ok(Json(AuthResponse { token }))
+}
+
+#[handler]
+async fn signin(
+    store: Data<&Store>,
+    jwt_secret: Data<&String>,
+    input: Json<input::AuthInput>,
+) -> Result<Json<AuthResponse>, poem::Error> {
+    let user = store.get_user_by_email(&input.email).await.map_err(|_| {
+        poem::Error::from_string(
+            "Invalid email or password",
+            poem::http::StatusCode::UNAUTHORIZED,
+        )
+    })?;
+
+    let valid =
+        verify(&input.password, &user.password).map_err(poem::error::InternalServerError)?;
+
+    if !valid {
+        return Err(poem::Error::from_string(
+            "Invalid email or password",
+            poem::http::StatusCode::UNAUTHORIZED,
+        ));
+    }
+
+    let claims = Claims {
+        sub: user.id,
+        email: user.email,
+        exp: 2000000000,
+    };
+
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(jwt_secret.as_bytes()),
+    )
+    .map_err(poem::error::InternalServerError)?;
+
+    Ok(Json(AuthResponse { token }))
+}
 
 #[handler]
 async fn get_websites(store: Data<&Store>) -> Json<Vec<Website>> {
@@ -97,8 +184,11 @@ async fn main() -> Result<(), std::io::Error> {
     let redis = RedisStore::new(&redis_url)
         .await
         .map_err(|e| std::io::Error::other(format!("Failed to initialize redis: {}", e)))?;
+    let jwt_secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
     let app = Route::new()
+        .at("/auth/signup", post(signup))
+        .at("/auth/signin", post(signin))
         .at("/websites", get(get_websites).post(create_website))
         .at(
             "/websites/:id",
@@ -109,6 +199,7 @@ async fn main() -> Result<(), std::io::Error> {
         .at("/regions", post(create_region).get(get_regions))
         .data(store)
         .data(redis)
+        .data(jwt_secret)
         .with(Cors::new());
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "5000".to_string());
