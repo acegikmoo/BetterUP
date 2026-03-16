@@ -1,11 +1,13 @@
 use poem::{
     EndpointExt, Route, Server, get, handler,
     listener::TcpListener,
+    middleware::Cors,
     post,
     web::{Data, Json, Path},
 };
 use redis_lib::{RedisStore, WebsiteStreamEntry};
 
+use std::fmt::format;
 use store::{
     Store,
     models::{Region, Website},
@@ -106,9 +108,13 @@ async fn main() -> Result<(), std::io::Error> {
         )
         .at("/regions", post(create_region).get(get_regions))
         .data(store)
-        .data(redis);
+        .data(redis)
+        .with(Cors::new());
 
-    Server::new(TcpListener::bind("0.0.0.0:3001"))
-        .run(app)
-        .await
+    let port = std::env::var("PORT").unwrap_or_else(|_| "5000".to_string());
+    let addr = format!("0.0.0.0:{port}");
+
+    println!("API listening on http://localhost:{port}");
+
+    Server::new(TcpListener::bind(&addr)).run(app).await
 }
