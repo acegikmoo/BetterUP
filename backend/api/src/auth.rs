@@ -3,6 +3,7 @@ use poem::{FromRequest, Request, RequestBody, Result, http::StatusCode};
 
 use crate::Claims;
 
+#[allow(dead_code)]
 pub struct AuthUser {
     pub id: String,
     pub email: String,

@@ -19,6 +19,8 @@ pub struct WebsiteStreamEntry {
 #[derive(Serialize, Deserialize)]
 pub struct NotificationEntry {
     pub website_id: String,
+    pub website_name: Option<String>,
+    pub user_email: String,
     pub region_id: String,
     pub status: String,
     pub response_time_ms: i32,
@@ -170,5 +172,21 @@ impl RedisStore {
             .xtrim("website_stream", StreamMaxlen::Equals(max_len))
             .await?;
         Ok(trimmed_count)
+    }
+
+    // returns true if a cooldown key exists, notify if false
+    // TTL 30 mins
+    pub async fn check_and_set_cooldown(
+        &self,
+        website_id: &str,
+        region_id: &str,
+    ) -> Result<bool, BoxError> {
+        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let key = format!("notif_cooldown:{}:{}", website_id, region_id);
+        let exists: bool = conn.exists(&key).await?;
+        if !exists {
+            let _: () = conn.set_ex(&key, "1", 1800).await?;
+        }
+        Ok(exists)
     }
 }

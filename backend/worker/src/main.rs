@@ -4,6 +4,7 @@ use influxdb2::{Client as InfluxClient, models::DataPoint};
 use redis_lib::RedisStore;
 use reqwest::Client as HttpClient;
 use std::fmt;
+use store::Store;
 use tokio::time::{Duration, interval};
 
 const REGION_ID: &str = "europe";
@@ -32,7 +33,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let influx_url = std::env::var("INFLUXDB_URL").expect("INFLUXDB_URL must be set");
     let influx_token = std::env::var("INFLUXDB_TOKEN").expect("INFLUXDB_TOKEN must be set");
-    let influx = InfluxClient::new(&influx_url, "0xdolores", &influx_token);
+    let influx_org = std::env::var("INFLUXDB_ORG").expect("INFLUXDB_ORG must be set");
+    let influx = InfluxClient::new(&influx_url, &influx_org, &influx_token);
+
+    let store = Store::new()
+        .await
+        .map_err(|e| format!("Failed to initialize store: {}", e))?;
 
     let http_client = HttpClient::new();
     let worker_id = uuid::Uuid::new_v4().to_string();
@@ -41,61 +47,103 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut interval = interval(Duration::from_secs(10));
     loop {
         interval.tick().await;
-        process_websites(&redis, &influx, &http_client, &worker_id, consumer_group).await?;
-    }
-}
-
-async fn process_websites(
-    redis: &RedisStore,
-    influx: &InfluxClient,
-    http_client: &HttpClient,
-    _worker_id: &str,
-    _consumer_group: &str,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let websites = redis.get_all_websites().await?;
-    for website in websites {
-        println!("get website: {:?}", website);
-        let start = Utc::now().timestamp_millis();
-        let status = match http_client.get(&website.url).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    Status::Up
-                } else {
-                    Status::Down
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to check {}: {}", website.url, e);
-                Status::Down
-            }
-        };
-        let response_time_ms = (Utc::now().timestamp_millis() - start) as i32;
-
-        // Writing to InfluxDB
-        let point = DataPoint::builder("website_tick")
-            .tag("website_id", website.id.clone())
-            .tag("region_id", REGION_ID)
-            .field("response_time_ms", response_time_ms as i64)
-            .field("status", status.to_string())
-            .timestamp(start * 1_000_000)
-            .build()?;
-        influx
-            .write("uptime_metrics", stream::iter(vec![point]))
-            .await?;
-
-        println!("status: {:?}", status);
-
-        // If down, add to notification stream
-        if status == Status::Down {
-            let notification = redis_lib::NotificationEntry {
-                website_id: website.id.clone(),
-                region_id: REGION_ID.to_string(),
-                status: status.to_string(),
-                response_time_ms,
-                timestamp: start,
-            };
-            redis.add_notification(notification).await?;
+        if let Err(e) = process_websites(
+            &redis,
+            &influx,
+            &http_client,
+            &store,
+            &worker_id,
+            consumer_group,
+        )
+        .await
+        {
+            eprintln!("Error processing websites: {}", e);
         }
     }
-    Ok(())
+
+    async fn process_websites(
+        redis: &RedisStore,
+        influx: &InfluxClient,
+        http_client: &HttpClient,
+        store: &Store,
+        _worker_id: &str,
+        _consumer_group: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let websites = redis.get_all_websites().await?;
+
+        for website in websites {
+            let start = Utc::now().timestamp_millis();
+
+            let status = match http_client.get(&website.url).send().await {
+                Ok(resp) if resp.status().is_success() => Status::Up,
+                Ok(resp) => {
+                    eprintln!("Non-success status for {}: {}", website.url, resp.status());
+                    Status::Down
+                }
+                Err(e) => {
+                    eprintln!("Failed to reach {}: {}", website.url, e);
+                    Status::Down
+                }
+            };
+
+            let response_time_ms = (Utc::now().timestamp_millis() - start) as i32;
+
+            println!(
+                "[{}] {} — {}ms — {}",
+                REGION_ID, website.url, response_time_ms, status
+            );
+
+            // Write tick to InfluxDB
+            let point = DataPoint::builder("website_tick")
+                .tag("website_id", website.id.clone())
+                .tag("region_id", REGION_ID)
+                .field("response_time_ms", response_time_ms as i64)
+                .field("status", status.to_string())
+                .timestamp(start * 1_000_000)
+                .build()?;
+
+            if let Err(e) = influx
+                .write("uptime_metrics", stream::iter(vec![point]))
+                .await
+            {
+                eprintln!("Failed to write to InfluxDB for {}: {}", website.id, e);
+            }
+
+            // Only notify if not in cooldown
+            if status == Status::Down {
+                let in_cooldown = redis
+                    .check_and_set_cooldown(&website.id, REGION_ID)
+                    .await
+                    .unwrap_or(false);
+
+                if in_cooldown {
+                    println!("Cooldown active for {}, skipping notification", website.id);
+                    continue;
+                }
+
+                // Look up the owner's email from db
+                match store.get_website_owner_email(&website.id).await {
+                    Ok(user_email) => {
+                        let notification = redis_lib::NotificationEntry {
+                            website_id: website.id.clone(),
+                            website_name: website.name.clone(),
+                            user_email,
+                            region_id: REGION_ID.to_string(),
+                            status: status.to_string(),
+                            response_time_ms,
+                            timestamp: start,
+                        };
+                        if let Err(e) = redis.add_notification(notification).await {
+                            eprintln!("Failed to queue notification for {}: {}", website.id, e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Could not find owner for website {}: {}", website.id, e);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
 }

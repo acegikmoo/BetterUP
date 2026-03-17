@@ -52,6 +52,33 @@ impl Store {
         Ok(user)
     }
 
+    pub async fn get_user_by_id(&self, id: &str) -> Result<models::User, sqlx::Error> {
+        let user = sqlx::query_as!(
+            models::User,
+            r#"SELECT id, email, password, created_at FROM "user" WHERE id = $1"#,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(user)
+    }
+
+    // Returns the owner email to propagate Notif entry
+    pub async fn get_website_owner_email(&self, website_id: &str) -> Result<String, sqlx::Error> {
+        let row = sqlx::query!(
+            r#"
+            SELECT u.email
+            FROM website w
+            JOIN "user" u ON u.id = w.user_id
+            WHERE w.id = $1
+            "#,
+            website_id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.email)
+    }
+
     pub async fn create_website(
         &self,
         url: &str,
