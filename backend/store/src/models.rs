@@ -7,6 +7,7 @@ pub struct Website {
     pub url: String,
     pub name: Option<String>,
     pub time_added: NaiveDateTime,
+    pub user_id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -15,6 +16,7 @@ pub struct Region {
     pub name: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
     pub id: String,
     pub email: String,

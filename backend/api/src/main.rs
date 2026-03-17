@@ -10,11 +10,13 @@ use serde::{Deserialize, Serialize};
 use bcrypt::{DEFAULT_COST, hash, verify};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use redis_lib::{RedisStore, WebsiteStreamEntry};
+use std::time::{SystemTime, UNIX_EPOCH};
 use store::{
     Store,
     models::{Region, Website},
 };
 
+mod auth;
 mod input;
 
 #[derive(Serialize, Deserialize)]
@@ -27,6 +29,30 @@ struct Claims {
 #[derive(Serialize)]
 struct AuthResponse {
     token: String,
+}
+
+fn get_token(
+    user_id: &str,
+    email: &str,
+    secret: &str,
+) -> Result<String, jsonwebtoken::errors::Error> {
+    let exp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as usize
+        + (7 * 24 * 60 * 60); // 7 days
+
+    let claims = Claims {
+        sub: user_id.to_string(),
+        email: email.to_string(),
+        exp,
+    };
+
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
 }
 
 #[handler]
@@ -47,18 +73,8 @@ async fn signup(
             _ => poem::error::InternalServerError(e),
         })?;
 
-    let claims = Claims {
-        sub: user.id,
-        email: user.email,
-        exp: 2000000000,
-    };
-
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(jwt_secret.as_bytes()),
-    )
-    .map_err(poem::error::InternalServerError)?;
+    let token =
+        get_token(&user.id, &user.email, &jwt_secret).map_err(poem::error::InternalServerError)?;
 
     Ok(Json(AuthResponse { token }))
 }
@@ -86,31 +102,25 @@ async fn signin(
         ));
     }
 
-    let claims = Claims {
-        sub: user.id,
-        email: user.email,
-        exp: 2000000000,
-    };
-
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(jwt_secret.as_bytes()),
-    )
-    .map_err(poem::error::InternalServerError)?;
+    let token =
+        get_token(&user.id, &user.email, &jwt_secret).map_err(poem::error::InternalServerError)?;
 
     Ok(Json(AuthResponse { token }))
 }
 
 #[handler]
-async fn get_websites(store: Data<&Store>) -> Json<Vec<Website>> {
-    let websites = store.get_websites().await.unwrap_or_default();
+async fn get_websites(store: Data<&Store>, auth: auth::AuthUser) -> Json<Vec<Website>> {
+    let websites = store.get_websites(&auth.id).await.unwrap_or_default();
     Json(websites)
 }
 
 #[handler]
-async fn get_website(store: Data<&Store>, id: Path<String>) -> Json<Option<Website>> {
-    let website = store.get_website(&id).await.ok();
+async fn get_website(
+    store: Data<&Store>,
+    auth: auth::AuthUser,
+    id: Path<String>,
+) -> Json<Option<Website>> {
+    let website = store.get_website(&id, &auth.id).await.ok();
     Json(website)
 }
 
@@ -118,10 +128,11 @@ async fn get_website(store: Data<&Store>, id: Path<String>) -> Json<Option<Websi
 async fn create_website(
     store: Data<&Store>,
     redis: Data<&RedisStore>,
+    auth: auth::AuthUser,
     input: Json<input::CreateWebsite>,
 ) -> Result<Json<Website>, poem::Error> {
     let website = store
-        .create_website(&input.url, input.name.as_deref())
+        .create_website(&input.url, input.name.as_deref(), &auth.id) // add &auth.id
         .await
         .map_err(poem::error::InternalServerError)?;
 
@@ -141,19 +152,20 @@ async fn create_website(
 #[handler]
 async fn update_website(
     store: Data<&Store>,
+    auth: auth::AuthUser,
     id: Path<String>,
     input: Json<input::UpdateWebsite>,
 ) -> Json<Option<Website>> {
     let website = store
-        .update_website(&id, input.url.as_deref(), input.name.as_deref())
+        .update_website(&id, &auth.id, input.url.as_deref(), input.name.as_deref())
         .await
         .ok();
     Json(website)
 }
 
 #[handler]
-async fn delete_website(store: Data<&Store>, id: Path<String>) -> String {
-    match store.delete_website(&id).await {
+async fn delete_website(store: Data<&Store>, auth: auth::AuthUser, id: Path<String>) -> String {
+    match store.delete_website(&id, &auth.id).await {
         Ok(_) => "Website deleted".to_string(),
         Err(_) => "Website not found".to_string(),
     }

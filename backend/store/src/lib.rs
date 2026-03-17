@@ -56,82 +56,91 @@ impl Store {
         &self,
         url: &str,
         name: Option<&str>,
+        user_id: &str,
     ) -> Result<models::Website, sqlx::Error> {
         let website = sqlx::query_as!(
             models::Website,
             r#"
-            INSERT INTO website (id, url, name)
-            VALUES ($1, $2, $3)
-            RETURNING id, url, name, time_added
-            "#,
+        INSERT INTO website (id, url, name, user_id)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, url, name, time_added, user_id
+        "#,
             Uuid::new_v4().to_string(),
             url,
-            name
+            name,
+            user_id,
         )
         .fetch_one(&self.pool)
         .await?;
         Ok(website)
     }
 
-    pub async fn get_website(&self, id: &str) -> Result<models::Website, sqlx::Error> {
-        let website = sqlx::query_as!(
+    pub async fn get_website(
+        &self,
+        id: &str,
+        user_id: &str,
+    ) -> Result<models::Website, sqlx::Error> {
+        sqlx::query_as!(
             models::Website,
             r#"
-            SELECT id, url, name, time_added
-            FROM website
-            WHERE id = $1
-            "#,
-            id
+        SELECT id, url, name, time_added, user_id
+        FROM website
+        WHERE id = $1 AND user_id = $2
+        "#,
+            id,
+            user_id,
         )
         .fetch_one(&self.pool)
-        .await?;
-        Ok(website)
+        .await
     }
 
-    pub async fn get_websites(&self) -> Result<Vec<models::Website>, sqlx::Error> {
-        let websites = sqlx::query_as!(
+    pub async fn get_websites(&self, user_id: &str) -> Result<Vec<models::Website>, sqlx::Error> {
+        sqlx::query_as!(
             models::Website,
             r#"
-            SELECT id, url, name, time_added
-            FROM website
-            "#,
+        SELECT id, url, name, time_added, user_id
+        FROM website
+        WHERE user_id = $1
+        "#,
+            user_id,
         )
         .fetch_all(&self.pool)
-        .await?;
-        Ok(websites)
+        .await
     }
 
     pub async fn update_website(
         &self,
         id: &str,
+        user_id: &str,
         url: Option<&str>,
         name: Option<&str>,
     ) -> Result<models::Website, sqlx::Error> {
-        let website = sqlx::query_as!(
+        sqlx::query_as!(
             models::Website,
             r#"
-            UPDATE website
-            SET url = COALESCE($2, url),
-                name = COALESCE($3, name)
-            WHERE id = $1
-            RETURNING id, url, name, time_added
-            "#,
+        UPDATE website
+        SET url = COALESCE($3, url),
+            name = COALESCE($4, name)
+        WHERE id = $1 AND user_id = $2
+        RETURNING id, url, name, time_added, user_id
+        "#,
             id,
+            user_id,
             url,
-            name
+            name,
         )
         .fetch_one(&self.pool)
-        .await?;
-        Ok(website)
+        .await
     }
 
-    pub async fn delete_website(&self, id: &str) -> Result<(), sqlx::Error> {
+    pub async fn delete_website(&self, id: &str, user_id: &str) -> Result<(), sqlx::Error> {
         sqlx::query!(
             r#"
-            DELETE FROM website
-            WHERE id = $1
-            "#,
-            id
+        DELETE FROM website
+        WHERE id = $1 AND user_id = $2
+        "#,
+            id,
+            user_id,
         )
         .execute(&self.pool)
         .await?;
