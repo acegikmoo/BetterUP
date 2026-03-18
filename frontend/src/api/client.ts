@@ -63,7 +63,7 @@ export async function request<T>(
         headers,
       });
     } catch {
-      throw new ApiError(0, "Network error — check your connection");
+      throw new ApiError(0, "Check your connection and try again");
     }
 
     if (res.status === 401) {
