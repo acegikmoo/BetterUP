@@ -28,6 +28,14 @@ impl fmt::Display for Status {
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     dotenv::from_filename(".env").ok();
 
+    // Hack: Dummy HTTP server to satisfy render
+    tokio::spawn(async {
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
+        loop {
+            let _ = listener.accept().await;
+        }
+    });
+
     let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
     let redis = RedisStore::new(&redis_url).await?;
 
