@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT u.email\n            FROM website w\n            JOIN \"user\" u ON u.id = w.user_id\n            WHERE w.id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d24d8205d86ba1e07fea1bebdcab276cbbbae4a5031cf927f0a16433b6c23d82"
+}

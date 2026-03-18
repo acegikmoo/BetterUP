@@ -1,9 +1,9 @@
 use sqlx::{PgPool, pool::PoolOptions};
+
+pub use models::{Region, Website};
 use uuid::Uuid;
 
 pub mod models;
-
-pub use models::{Region, Website};
 
 #[derive(Clone)]
 pub struct Store {
