@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BetterUP",
-  description: "Website monitoring dashboard",
+  title: "BetterUP — Website Monitoring",
+  description: "Know the moment your website goes down.",
 };
 
 export default function RootLayout({
