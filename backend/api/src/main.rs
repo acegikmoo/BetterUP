@@ -185,8 +185,7 @@ async fn create_region(store: Data<&Store>, input: Json<input::CreateRegion>) ->
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-    dotenv::from_filename(".env")
-        .map_err(|e| std::io::Error::other(format!("Failed to load .env file: {}", e)))?;
+    dotenv::from_filename(".env").ok();
 
     let store = Store::new()
         .await

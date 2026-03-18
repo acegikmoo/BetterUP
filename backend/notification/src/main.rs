@@ -7,7 +7,7 @@ use tokio::time::{Duration, interval};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    dotenv::from_filename(".env")?;
+    dotenv::from_filename(".env").ok();
 
     let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
     let redis = RedisStore::new(&redis_url).await?;
