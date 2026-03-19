@@ -10,7 +10,7 @@ export function useWebsites() {
   async function load() {
     try {
       const data = await api.websites.list();
-      setWebsites(data);
+      setWebsites(data ?? []);
     } catch {
       setError("Failed to load monitors.");
     } finally {
