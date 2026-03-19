@@ -6,13 +6,18 @@ A lightweight, self-hosted website uptime monitor. Checks your sites every 10 se
 
 ## Features
 
-- **Continuous monitoring** — HTTP checks every 10 seconds per website
-- **Email alerts** — notified on downtime; 30-minute cooldown prevents spam
-- **Per-user monitors** — each account manages its own websites
-- **Metrics storage** — response time and status written to InfluxDB on every tick
-- **JWT authentication** — stateless auth with 7-day tokens
-- **Redis streams** — decoupled producer/consumer architecture for checks and notifications
-- **Dashboard** — Next.js frontend to add, edit, and remove monitors
+- HTTP checks every 10 seconds per website
+- Email alerts on downtime with 30-minute cooldown per site
+- Per-user monitor management
+- Response time and status written to InfluxDB on every tick
+- Stateless JWT auth with 7-day tokens
+- Decoupled Redis stream architecture for checks and notifications
+
+---
+
+## Architecture
+
+![System Architecture](frontend/public/architecture.png)
 
 ---
 
@@ -30,19 +35,9 @@ A lightweight, self-hosted website uptime monitor. Checks your sites every 10 se
 
 ---
 
-## Architecture
-
-![System Architecture](frontend/public/architecture.png)
-
----
-
 ## Getting Started
 
-### Prerequisites
-
-- Rust (stable), Node.js 20+ / Bun, PostgreSQL 15+, Redis 7+, InfluxDB v2
-
-### Clone
+**Prerequisites:** Rust (stable), Node.js 20+ / Bun, PostgreSQL 15+, Redis 7+, InfluxDB v2
 
 ```bash
 git clone https://github.com/acegikmoo/BetterUP
@@ -71,7 +66,7 @@ SMTP_USER=your_email@gmail.com
 SMTP_PASS=your_smtp_app_password
 ```
 
-**`frontend/.env.local`**:
+**`frontend/.env.local`:**
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:5000
@@ -82,21 +77,21 @@ NEXT_PUBLIC_API_URL=http://localhost:5000
 ## Running Locally
 
 ```bash
-# 1. Run database migrations
+# Migrate database
 cd backend
 cargo install sqlx-cli
 sqlx migrate run --source store/migrations
 
-# 2. Start the API (http://localhost:5000)
+# Start API (http://localhost:5000)
 cargo run -p api
 
-# 3. Start the worker (separate terminal)
+# Start worker (separate terminal)
 cargo run -p worker
 
-# 4. Start the notification service (separate terminal)
+# Start notification service (separate terminal)
 cargo run -p notification
 
-# 5. Start the frontend (http://localhost:3000)
+# Start frontend (http://localhost:3000)
 cd ../frontend
 bun install && bun dev
 ```
@@ -105,9 +100,9 @@ bun install && bun dev
 
 ## Deployment
 
-Deployed on [Render](https://render.com) (backend) and [Vercel](https://vercel.com) (frontend).
+Backend on [Render](https://render.com), frontend on [Vercel](https://vercel.com).
 
-### Render — Backend
+### Render
 
 | Service      | Command                     | Type              |
 | ------------ | --------------------------- | ----------------- |
@@ -115,15 +110,15 @@ Deployed on [Render](https://render.com) (backend) and [Vercel](https://vercel.c
 | Worker       | `cargo run -p worker`       | Background Worker |
 | Notification | `cargo run -p notification` | Background Worker |
 
-> Worker and Notification bind a dummy listener on `:8080` to satisfy Render's health check.
+> Worker and Notification bind a dummy listener on `:8080` to pass Render's health check.
 
-### Vercel — Frontend
+### Vercel
 
 ```bash
 cd frontend && vercel deploy
 ```
 
-Set `NEXT_PUBLIC_API_URL` to your Render API URL in the Vercel project settings.
+Set `NEXT_PUBLIC_API_URL` to your Render API URL in Vercel project settings.
 
 ---
 
@@ -138,31 +133,15 @@ Protected routes require `Authorization: Bearer <token>`.
 | `POST` | `/auth/signup` | No        | Register an account  |
 | `POST` | `/auth/signin` | No        | Sign in, returns JWT |
 
-```json
-// Request body
-{ "email": "user@example.com", "password": "password123" }
-
-// Response
-{ "token": "<jwt>" }
-```
-
 ### Websites
 
-| Method   | Path            | Protected | Description          |
-| -------- | --------------- | --------- | -------------------- |
-| `GET`    | `/websites`     | Yes       | List user's monitors |
-| `POST`   | `/websites`     | Yes       | Add a monitor        |
-| `GET`    | `/websites/:id` | Yes       | Get one monitor      |
-| `PATCH`  | `/websites/:id` | Yes       | Update URL or name   |
-| `DELETE` | `/websites/:id` | Yes       | Remove a monitor     |
-
-```json
-// POST body
-{ "url": "https://example.com", "name": "My Site" }
-
-// PATCH body (all fields optional)
-{ "url": "https://new-url.com", "name": "New Name" }
-```
+| Method   | Path            | Protected | Description        |
+| -------- | --------------- | --------- | ------------------ |
+| `GET`    | `/websites`     | Yes       | List monitors      |
+| `POST`   | `/websites`     | Yes       | Add a monitor      |
+| `GET`    | `/websites/:id` | Yes       | Get one monitor    |
+| `PATCH`  | `/websites/:id` | Yes       | Update URL or name |
+| `DELETE` | `/websites/:id` | Yes       | Remove a monitor   |
 
 ### Regions
 
@@ -183,24 +162,22 @@ Protected routes require `Authorization: Bearer <token>`.
 │   │       ├── main.rs     # Routes, handlers, JWT issuance
 │   │       ├── auth.rs     # JWT extractor middleware
 │   │       └── input.rs    # Request body types
-│   ├── worker/         # Uptime checker — polls sites, writes to InfluxDB
-│   ├── notification/   # Email dispatcher — reads Redis notification stream
+│   ├── worker/         # Uptime checker, InfluxDB writer
+│   ├── notification/   # Email dispatcher, reads Redis stream
 │   ├── redis_lib/      # Shared Redis client (streams, cooldown keys)
-│   ├── store/          # SQLx queries and models
-│   │   └── migrations/ # PostgreSQL migration files
-│   ├── db_processor/   # Placeholder for future DB event processing
-│   └── Cargo.toml      # Workspace manifest
+│   ├── store/          # SQLx models + migrations
+│   ├── db_processor/   # Placeholder for future use
+│   └── Cargo.toml
 │
-└── frontend/
-    └── src/
-        ├── app/            # Next.js App Router pages (root, login, signup, dashboard)
-        ├── api/            # Typed fetch client + token storage
-        ├── components/
-        │   ├── ui/             # shadcn/ui primitives (Button, Dialog, Input…)
-        │   ├── dashboard/      # Header, Stats, EmptyState
-        │   └── website/        # WebsiteCard, Add/Edit/Delete dialogs
-        ├── hooks/          # useWebsites, create/update/delete hooks
-        └── lib/            # cn() utility
+└── frontend/src/
+    ├── app/            # Pages: root, login, signup, dashboard
+    ├── api/            # Typed fetch client + token storage
+    ├── components/
+    │   ├── ui/         # shadcn/ui primitives
+    │   ├── dashboard/  # Header, Stats, EmptyState
+    │   └── website/    # WebsiteCard, Add/Edit/Delete dialogs
+    ├── hooks/          # useWebsites, create/update/delete hooks
+    └── lib/            # cn() utility
 ```
 
 ---
@@ -234,12 +211,11 @@ CREATE TABLE region (
 ## Roadmap
 
 - [ ] Multi-region workers
-- [ ] Response time charts (InfluxDB → dashboard)
-- [ ] Incident history and downtime log per monitor
+- [ ] Response time charts in the dashboard
+- [ ] Incident history per monitor
 - [ ] Webhook / Slack alerts
 - [ ] Public status pages
 - [ ] Configurable check intervals
-- [ ] `db_processor` — async event sourcing for audit trails
 - [ ] Two-factor authentication
 
 ---
@@ -248,9 +224,7 @@ CREATE TABLE region (
 
 1. Fork and create a branch: `git checkout -b feat/your-feature`
 2. Commit: `git commit -m "feat: describe your change"`
-3. Push and open a pull request
-
-Keep PRs focused with a clear description of what changed and why.
+3. Open a pull request with a clear description of what changed and why.
 
 ---
 
