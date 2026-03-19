@@ -63,7 +63,7 @@ export default function LoginPage() {
         <div className="border border-border rounded-xl p-8">
           <h1 className="text-lg font-semibold mb-1">Sign in</h1>
           <p className="text-sm text-muted-foreground mb-6">
-            Monitor your websites with confidence.
+            Monitor your websites.
           </p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

@@ -132,18 +132,96 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 }
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
   }
   button {
     @apply cursor-pointer;
-
   }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply tracking-tight;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fade-in 0.15s ease-out both;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .modal-content-enter {
+    animation: modal-content-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes modal-content-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.82 0 0);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.7 0 0);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.4 0 0);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.5 0 0);
 }
