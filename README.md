@@ -4,6 +4,12 @@ A lightweight, self-hosted website uptime monitor. Checks your sites every 10 se
 
 ---
 
+## Architecture
+
+![System Architecture](frontend/public/architecture.png)
+
+---
+
 ## Features
 
 - HTTP checks every 10 seconds per website
@@ -12,12 +18,6 @@ A lightweight, self-hosted website uptime monitor. Checks your sites every 10 se
 - Response time and status written to InfluxDB on every tick
 - Stateless JWT auth with 7-day tokens
 - Decoupled Redis stream architecture for checks and notifications
-
----
-
-## Architecture
-
-![System Architecture](frontend/public/architecture.png)
 
 ---
 
